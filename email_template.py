@@ -1,0 +1,28 @@
+"""Email-client-friendly HTML with escaped content and a plain-text alternative."""
+from html import escape
+from urllib.parse import urlsplit
+
+def safe_link(value):
+    value=str(value)
+    try:
+        parsed=urlsplit(value)
+        if parsed.scheme in ('https','http') and parsed.hostname and not parsed.username and not parsed.password:
+            return escape(value,quote=True)
+    except ValueError:pass
+    return ''
+
+def render_report(rows,message,origin):
+    e=lambda value:escape(str(value),quote=True)
+    palette={'Applied':('#e4f2e8','#256443'),'PDF approved':('#e5edfb','#31569a'),'Ready to review':('#fff0cf','#805d13'),'No draft yet':('#edf0f2','#526370')}
+    counts={label:sum(row['status']==label for row in rows) for label in palette}
+    cards=''.join(f'<td width="33%" style="padding:18px 10px;text-align:center;border:1px solid #e3e9de;background:{bg}"><div style="font-size:26px;font-weight:bold;color:{fg}">{counts[label]}</div><div style="font-size:12px;color:{fg};margin-top:5px">{label}</div></td>' for label,(bg,fg) in list(palette.items())[:3])
+    content=[]
+    for row in rows:
+        bg,fg=palette[row['status']]
+        listing=safe_link(row['link']);review=safe_link(origin.rstrip('/')+'/application?id='+str(row['id']))
+        action=f'<a href="{review}" style="color:#245b45;font-weight:bold;text-decoration:underline">Review draft →</a>' if row['status']!='No draft yet' else ''
+        listing_html=f'<a href="{listing}" style="color:#46675b;text-decoration:underline">View job ↗</a>' if listing else ''
+        content.append(f'''<tr><td style="padding:20px 14px;border-bottom:1px solid #e7ebe2;vertical-align:top;width:37%"><div style="font-size:15px;font-weight:bold;color:#203d30">{e(row['title'])}</div><div style="font-size:12px;color:#657368;margin:5px 0 14px">{e(row['company'])}</div><div style="font-size:12px">{listing_html}</div></td><td style="padding:20px 14px;border-bottom:1px solid #e7ebe2;vertical-align:top;width:39%;font-size:12px;line-height:1.7;color:#536359"><strong style="color:#30483a">{e(row['fit'])}</strong><div>{e(row['reason'])}</div><div style="margin-top:9px"><strong>Gaps:</strong> {e(row['gaps'])}</div></td><td style="padding:20px 14px;border-bottom:1px solid #e7ebe2;vertical-align:top;width:24%"><span style="display:inline-block;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:bold;background:{bg};color:{fg}">{e(row['status'])}</span><div style="font-size:12px;margin-top:14px">{action}</div></td></tr>''')
+    if not content:content=['<tr><td colspan="3" style="padding:35px 20px;text-align:center;color:#657368">No jobs have been imported yet. Check the run update above for your next step.</td></tr>']
+    dashboard=safe_link(origin.rstrip('/')+'/?view=ready')
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Aftara report</title></head><body style="margin:0;padding:0;background:#f2f5ee;color:#243c2d;font-family:Arial,Helvetica,sans-serif"><div style="display:none;max-height:0;overflow:hidden">Your job matches, resume drafts and application updates in one place.</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f5ee"><tr><td align="center" style="padding:24px 10px"><table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;background:#ffffff;border:1px solid #dfe7d8;border-radius:16px;overflow:hidden"><tr><td style="padding:30px 26px;background:#204b3b;color:#fff"><div style="font-size:20px;font-weight:bold;letter-spacing:-.5px">↗ Aftara</div><div style="font-size:10px;letter-spacing:2px;color:#cbdcad;margin-top:24px">YOUR NEXT CHAPTER, THOUGHTFULLY.</div><h1 style="font-size:28px;line-height:1.2;margin:12px 0;font-weight:normal">Your job-search update</h1><div style="font-size:13px;line-height:1.7;color:#d4e1cd">A clear view of your opportunities and what’s next.</div></td></tr><tr><td style="padding:24px 22px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="4"><tr>{cards}</tr></table><div style="padding:15px 17px;background:#f4f6ed;border-left:3px solid #8ca572;margin-top:20px;font-size:13px;line-height:1.7;color:#4c604a"><strong>Run update</strong><br>{e(message)}</div><h2 style="font-size:18px;margin:26px 0 5px">Your saved opportunities</h2><p style="font-size:12px;color:#71806d;margin:0 0 15px">Latest {len(rows)} saved jobs · Status reflects activity recorded in Aftara.</p></td></tr><tr><td style="padding:0 12px"><table aria-label="Job matches and application status" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:collapse;word-wrap:break-word;overflow-wrap:anywhere"><thead><tr style="background:#edf2e5;color:#45613d;font-size:11px;text-align:left"><th scope="col" style="width:37%;padding:12px 14px">OPPORTUNITY</th><th scope="col" style="width:39%;padding:12px 14px">FIT &amp; GAPS</th><th scope="col" style="width:24%;padding:12px 14px">STATUS</th></tr></thead><tbody>{''.join(content)}</tbody></table></td></tr><tr><td style="padding:28px 24px;text-align:center"><a href="{dashboard}" style="display:inline-block;background:#285740;border-radius:9px;padding:15px 24px;color:#fff;font-size:14px;text-decoration:none;font-weight:bold">Open your review queue →</a><p style="font-size:11px;line-height:1.8;color:#798371;margin:18px 0 0">You review before you apply. No applications were submitted automatically.<br>Manage report time and email preferences in Your setup.</p></td></tr></table></td></tr></table></body></html>'''
